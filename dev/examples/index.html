@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Getting started · AbstractProximableFunctions.jl</title><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">AbstractProximableFunctions.jl</a></span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Introduction</a></li><li><a class="tocitem" href="../installation/">Installation</a></li><li class="is-active"><a class="tocitem" href>Getting started</a></li><li><a class="tocitem" href="../functions/">Main functions</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Getting started</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Getting started</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/grizzuti/AbstractProximableFunctions/blob/main/docs/src/examples.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Getting-started"><a class="docs-heading-anchor" href="#Getting-started">Getting started</a><a id="Getting-started-1"></a><a class="docs-heading-anchor-permalink" href="#Getting-started" title="Permalink"></a></h1><p>We show some of the functionalities of <code>AbstractProximableFunctions</code> with a simple tutorial, focus on a 2D denoising problem. Before starting, make sure the package is installed (see Section <a href="../installation/#Installation-instructions">Installation instructions</a>). For this tutorial, we also need <code>FFTW</code> (Fourier transform), <code>TestImages</code>, <code>PyPlot</code>. To install,</p><pre><code class="language-julia hljs">@(v1.8) pkg&gt; add FFTW, TestImages, PyPlot</code></pre><p>Here, we use <code>PyPlot</code> for image visualization, but many other packages may fit the bill.</p><p>To load all the needed packages:</p><pre><code class="language-julia hljs">using LinearAlgebra, AbstractLinearOperators, AbstractProximableFunctions, FFTW, PyPlot</code></pre><p>For our denoising exercise, we initialize a noisy image, which consists of a simple complex plane wave:</p><pre><code class="language-julia hljs"># Setting noisy data (plane wave)
+n = (256, 256)   # Image size
+fov = (1f0, 1f0) # Field-of-view
+h = fov./n       # Spacing
+x = range(-fov[1]/2, fov[1]/2; length=n[1]); y = range(-fov[2]/2, fov[2]/2; length=n[2]); # Cartesian coordinates
+k = (0.01f0, 0.02f0)./(2f0.*h) # Wavenumber
+x_clean = exp.(1im*2*Float32(pi)*(k[1]*reshape(x, :, 1).+k[2]*reshape(y, 1, :))) # Plane wave
+x_noisy = x_clean.+0.5f0*randn(ComplexF32, n) # Adding noise</code></pre><p>We study the effect of three regularization functionals: <span>$\ell^1$</span>, <span>$\ell^2$</span>, and <span>$\ell^{\infty}$</span>:</p><pre><code class="language-julia hljs"># Initializing regularization functionals (w/out transform)
+g1   = norm(ComplexF32, 2, 1)   # ℓ1 norm for 2D (complex) images
+g2   = norm(ComplexF32, 2, 2)   # ℓ2 norm for 2D (complex) images
+gInf = norm(ComplexF32, 2, Inf) # ℓInf norm for 2D (complex) images</code></pre><p>To perform denoising, e.g. find the solution of the optimization problem <span>$\min_{\mathbf{x}}\frac{1}{2}||\mathbf{x}-\mathbf{y}||^2+\lambda g(\mathbf{x})$</span>, we need to set a weight <span>$\lambda$</span> and make a call to proximal operator:</p><pre><code class="language-julia hljs"># Denoising
+λ1 = 0.5f0*norm(x_clean-x_noisy)^2/g1(x_clean)
+x1 = prox(x_noisy, λ1, g1)
+λ2 = 0.5f0*norm(x_clean-x_noisy)^2/g2(x_clean)
+x2 = prox(x_noisy, λ2, g2)
+λInf = 0.5f0*norm(x_clean-x_noisy)^2/gInf(x_clean)
+xInf = prox(x_noisy, λInf, gInf)</code></pre><p>The results of the denoising problem will not look particularly good, because we are not exploiting enough prior knowledge of the solution.</p><p>A more sensible way to go about relies on the sparsity of the solution in some domain. For this purpose, we define the Fourier transform:</p><pre><code class="language-julia hljs"># Set Fourier transform as a linear operator (wrapper via AbstractLinearOperators)
+C = Float32(sqrt(prod(n)))
+F = linear_operator(ComplexF32, n, n, x -&gt; ifftshift(fft(x))/C, # Forward evaluation
+                                      x̂ -&gt; C*ifft(fftshift(x̂))) # Adjoint evaluation</code></pre><p>We can compose the Fourier transform with the previous regularization functionals:</p><pre><code class="language-julia hljs"># Transform-based regularization functionals
+g1_F = g1∘F
+g2_F = g2∘F
+gInf_F = gInf∘F</code></pre><p>Performing denoising with weighted regularization is tantamount to solve the optimization problem</p><p><span>$\min_{\mathbf{x}}\dfrac{1}{2}||\mathbf{x}-\mathbf{y}||^2+\lambda g(A\mathbf{x})$</span></p><p>where <span>$A$</span> is a linear operator. By default, in <code>AbstractProximalFunctions</code> this problem is reformulated in dual form:</p><p><span>$\min_{\mathbf{p}}\dfrac{1}{2}||\lambda A^*\mathbf{p}-\mathbf{y}||^2+\lambda g^*(\mathbf{p})$</span></p><p>where <span>$g^*$</span> is the convex conjugate of <span>$g$</span>. Primal <span>$\mathbf{x}$</span> and dual variables <span>$\mathbf{p}$</span> are related by <span>$\mathbf{x}=\mathbf{y}-\lambda A^*\mathbf{p}$</span>.</p><p>In order to solve this problem, we resort to a FISTA iterative solver. To specify FISTA, we have to know the Lipschitz constant of <span>$\nabla f$</span> where <span>$f(\mathbf{x})=\dfrac{1}{2}||\lambda A^*\mathbf{p}-\mathbf{y}||^2$</span>, which is <span>$\mathrm{Lip}\nabla f=\lambda^2\rho(A)$</span> with <span>$\rho$</span> being the spectral radius. Importantly, whenever computing the <code>prox</code> of <code>WeighthedProximalFunction</code>s, <code>FISTA_options</code> actually expects <span>$\mathrm{Lip}\nabla f=\rho(A)$</span>. Hence:</p><pre><code class="language-julia hljs"># Minimization options
+options = FISTA_options(1f0;           # Lipschitz constant of ∇f(x), in this case equivalent to spectral norm of F
+                             niter=10) # Number of iteration</code></pre><p>Now, everything is set up to run the proximal computations:</p><pre><code class="language-julia hljs"># Denoising (w/ Fourier transform)
+λ1_F = 0.5f0*norm(x_clean-x_noisy)^2/g1_F(x_clean)
+x1_F = prox(x_noisy, λ1_F, g1_F, options)
+λ2_F = 0.5f0*norm(x_clean-x_noisy)^2/g2_F(x_clean)
+x2_F = prox(x_noisy, λ2_F, g2_F, options)
+λInf_F = 0.5f0*norm(x_clean-x_noisy)^2/gInf_F(x_clean)
+xInf_F = prox(x_noisy, λInf_F, gInf_F, options)</code></pre><p>We expect the transform-based <span>$\ell^1$</span> to performed the best. In order to compare the results:</p><pre><code class="language-julia hljs"># Plot
+vmin = -1f0
+vmax =  1f0
+figure()
+subplot(2,5,1)
+imshow(real(x_noisy); vmin=vmin, vmax=vmax)
+title(&quot;Noisy phantom&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,2)
+imshow(real(xInf); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^{\infty}$ denoising&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,3)
+imshow(real(x2); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^2$ denoising&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,4)
+imshow(real(x1); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^1$ denoising&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,5)
+imshow(real(x_clean); vmin=vmin, vmax=vmax)
+title(&quot;Ground truth&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,6)
+imshow(real(x_noisy); vmin=vmin, vmax=vmax)
+title(&quot;Noisy phantom&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,7)
+imshow(real(xInf_F); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^{\infty}$ denoising (w/ transform)&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,8)
+imshow(real(x2_F); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^2$ denoising (w/ transform)&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,9)
+imshow(real(x1_F); vmin=vmin, vmax=vmax)
+title(L&quot;$\ell^1$ denoising (w/ transform)&quot;)
+axis(&quot;off&quot;)
+subplot(2,5,10)
+imshow(real(x_clean); vmin=vmin, vmax=vmax)
+title(&quot;Ground truth&quot;)
+axis(&quot;off&quot;)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../installation/">« Installation</a><a class="docs-footer-nextpage" href="../functions/">Main functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 24 February 2023 14:25">Friday 24 February 2023</span>. Using Julia version 1.8.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
